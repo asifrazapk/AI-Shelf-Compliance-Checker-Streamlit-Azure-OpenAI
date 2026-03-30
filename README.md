@@ -78,3 +78,17 @@ Asif
 ## 📜 License
 
 MIT
+
+
+# 📊 Planogram Compliance AI
+## Image
+
+## 🎥 Live Demo
+
+[![App Screenshot]([https://your-image-link.com/screenshot.png](https://github.com/asifrazapk/AI-Shelf-Compliance-Checker-Streamlit-Azure-OpenAI/blob/main/app-demo.png))]([https://your-demo-link.com](https://github.com/asifrazapk/AI-Shelf-Compliance-Checker-Streamlit-Azure-OpenAI/blob/main/app-demo.png))
+
+👉 Click the image to try the live app!
+## 🎥 Live Demo
+👉 https://your-demo-link.com
+
+An AI-powered application to analyze retail shelf compliance...
