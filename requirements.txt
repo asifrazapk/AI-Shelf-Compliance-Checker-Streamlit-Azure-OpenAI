@@ -32,3 +32,6 @@ pandas
 plotly
 
 opencv-python
+
+
+numpy
