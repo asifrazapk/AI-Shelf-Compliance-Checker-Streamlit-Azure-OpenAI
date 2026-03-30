@@ -30,3 +30,5 @@ rapidfuzz
 
 pandas 
 plotly
+
+opencv-python
