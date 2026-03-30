@@ -1,12 +1,13 @@
+import re
 import os
-import base64
+import cv2
 import json
 import time
+import base64
+import numpy as np
 import streamlit as st
 from openai import OpenAI
 from dotenv import load_dotenv
-from rapidfuzz import fuzz
-import re
 
 # ==============================
 # CONFIG
@@ -317,9 +318,72 @@ STRICT RULES
     
     return data
 
-def extract_prices(path):
-    prompt = """
-Extract price tags and product hints.
+class ImageDeblurrer:
+    def __init__(self):
+        self.psf = None
+    
+    def estimate_psf(self, image, kernel_size=11):
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 50, 150)
+        
+        f_transform = np.fft.fft2(edges)
+        f_shift = np.fft.fftshift(f_transform)
+        magnitude = np.log(np.abs(f_shift) + 1)
+        
+        self.psf = cv2.getGaussianKernel(kernel_size, kernel_size/6)
+        self.psf = self.psf @ self.psf.T
+        self.psf /= self.psf.sum()
+        
+        return self.psf
+    
+    def deblur(self, image, iterations=15):
+        if self.psf is None:
+            self.estimate_psf(image)
+        
+        img = image.astype(np.float32) / 255.0
+        estimate = img.copy()
+        
+        for _ in range(iterations):
+            convolved = cv2.filter2D(estimate, -1, self.psf)
+            ratio = img / (convolved + 1e-5)
+            estimate *= cv2.filter2D(ratio, -1, self.psf[::-1, ::-1])
+        
+        return np.clip(estimate * 255, 0, 255).astype(np.uint8)
+
+
+def load_image_to_base64(image_path):
+    with open(image_path, "rb") as img_file:
+        image_base64 = base64.b64encode(img_file.read()).decode("utf-8")
+    return image_base64
+
+
+def create_data_url(image_base64, mime="image/jpg"):
+    data_url = f"data:{mime};base64,{image_base64}"
+    return data_url
+
+
+SYSTEM_PROMPT_PRICE_EXTR = """
+You are a retail shelf price-tag extraction assistant.
+
+Your priority is accuracy over completeness.
+Do not guess blurry digits, and do not infer prices from nearby products.
+
+Perform the task in two stages:
+1. Identify each visible shelf-edge price tag and transcribe the price exactly as seen.
+2. Match each price tag to the most likely product directly above it using horizontal alignment.
+
+Rules:
+- Only extract information that is visually supported by the image.
+- Never mark a result as High confidence unless:
+  - all price digits are clearly readable, and
+  - the tag-to-product match is visually unambiguous.
+- If the last cents digits are unclear (for example 59 vs 99), mark the price as uncertain and lower confidence.
+- If multiple nearby products could belong to the same tag, lower confidence.
+- If the price cannot be read reliably, use "unclear" instead of guessing.
+- If the product name is partially unreadable, include the readable portion and add "name unclear".
+- Be especially careful not to confuse adjacent tags on the same shelf.
+- Do not use product familiarity or typical store pricing to guess a price.
+- Precision is more important than recall.
 
 Return JSON:
 {
@@ -328,20 +392,60 @@ Return JSON:
  ]
 }
 """
+
+USER_PROMPT_PRICE_EXTR = """
+Extract all visible shelf price tags along with the most likely product name and shelf location.
+
+Important:
+- First read the price tags exactly.
+- Then match each tag to the nearest product above it.
+- If a price may be 4.59 vs 4.99, do not guess; mark it uncertain.
+- If a product-to-tag match is ambiguous, lower confidence.
+"""
+
+
+def extract_prices_from_image(image_path):
+    
+    image_base64 = load_image_to_base64(image_path)
+    data_url = create_data_url(image_base64, mime="image/jpg")
+    
     response = client.responses.create(
-        model=os.environ["AZURE_OPENAI_MODEL"],
-        input=[{
-            "role": "user",
-            "content": [
-                {"type": "input_text", "text": prompt},
-                {"type": "input_image", "image_url": encode_image(path)}
-            ]
-        }]
+        model='gpt-5.4',
+        input=[
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT_PRICE_EXTR
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": USER_PROMPT_PRICE_EXTR},
+                    {"type": "input_image", "image_url": data_url},
+                ],
+            }
+        ]
     )
+    
     result = response.output_text.strip().replace("```json", "").replace("```", "")
     data = json.loads(result)
     with open("price_extracted.json", "w") as f:
         json.dump(data, f, indent=2)
+    return data
+
+
+def deblur_image(image_path, output_path, iterations=15):
+    """Apply deblurring to image and save result"""
+    
+    deblurrer = ImageDeblurrer()
+    img = cv2.imread(image_path)
+    result = deblurrer.deblur(img, iterations=iterations)
+    cv2.imwrite(output_path, result)
+    
+    return result
+
+def extract_prices(path):
+    deblur_image(path, "uploads/deblurred_true.jpg", iterations=12)
+    data = extract_prices_from_image("uploads/deblurred_true.jpg")
     return data
 
 # ==============================
