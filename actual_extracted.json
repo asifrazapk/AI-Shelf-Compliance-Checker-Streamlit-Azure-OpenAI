@@ -1,0 +1,44 @@
+{
+  "shelves": [
+    {
+      "shelf": 1,
+      "products": [
+        "Sprouts Chili Lime Rolled Corn Tortilla Chips",
+        "Sprouts Chili Lime Rolled Corn Tortilla Chips",
+        "Sprouts Chili Lime Rolled Corn Tortilla Chips",
+        "Sprouts Spicy Nacho Rolled Corn Tortilla Chips",
+        "Sprouts Spicy Nacho Rolled Corn Tortilla Chips",
+        "Sprouts Spicy Nacho Rolled Corn Tortilla Chips"
+      ]
+    },
+    {
+      "shelf": 2,
+      "products": [
+        "Sprouts Organic Yellow Corn Tortilla Chips Sea Salt",
+        "Sprouts Organic Yellow Corn Tortilla Chips Sea Salt",
+        "Sprouts Grain Free Tortilla Chips Sea Salt",
+        "Sprouts Organic Tortilla Chips Sea Salt",
+        "Sprouts Organic Tortilla Chips Sea Salt"
+      ]
+    },
+    {
+      "shelf": 3,
+      "products": [
+        "Siete Grain Free Tortilla Chips Sea Salt",
+        "Siete Grain Free Tortilla Chips Sea Salt",
+        "Siete Grain Free Tortilla Chips Lime",
+        "Siete Grain Free Cinnamon Churro Strips",
+        "Siete Grain Free Tortilla Chips Dip Chips"
+      ]
+    },
+    {
+      "shelf": 4,
+      "products": [
+        "Late July Organic Sea Salt Tortilla Chips",
+        "Late July Organic Sea Salt & Lime Tortilla Chips",
+        "Late July Organic Sea Salt & Lime Tortilla Chips",
+        "Late July Tortilla Chips"
+      ]
+    }
+  ]
+}

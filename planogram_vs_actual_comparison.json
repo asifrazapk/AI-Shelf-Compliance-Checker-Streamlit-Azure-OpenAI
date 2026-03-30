@@ -1,0 +1,157 @@
+{
+  "overall_compliance": {
+    "matching_percentage": "23%",
+    "non_matching_percentage": "77%",
+    "confidence": 62
+  },
+  "shelves": [
+    {
+      "level": "Shelf 1",
+      "planogram": [
+        "ChipStore Lite Spicy Nachos",
+        "Chips Sara Lentil Aged Spicy Nachos",
+        "Chips Tortilla Chee Awie Chips",
+        "Chips Tortilla Rolled Nachos Cheese Bites",
+        "Chips Tortilla Rolled Smoky Led Nachos",
+        "Chips Tortilla Guacamole Nachos"
+      ],
+      "actual": [
+        "Sprouts Chili Lime Rolled Corn Tortilla Chips",
+        "Sprouts Chili Lime Rolled Corn Tortilla Chips",
+        "Sprouts Chili Lime Rolled Corn Tortilla Chips",
+        "Sprouts Spicy Nacho Rolled Corn Tortilla Chips",
+        "Sprouts Spicy Nacho Rolled Corn Tortilla Chips",
+        "Sprouts Spicy Nacho Rolled Corn Tortilla Chips"
+      ],
+      "matches": [
+        "ChipStore Lite Spicy Nachos",
+        "Chips Tortilla Rolled Nachos Cheese Bites"
+      ],
+      "mismatches": [
+        "Chips Sara Lentil Aged Spicy Nachos replaced by Sprouts Chili Lime Rolled Corn Tortilla Chips",
+        "Chips Tortilla Chee Awie Chips replaced by Sprouts Chili Lime Rolled Corn Tortilla Chips",
+        "Chips Tortilla Rolled Smoky Led Nachos replaced by Sprouts Spicy Nacho Rolled Corn Tortilla Chips",
+        "Chips Tortilla Guacamole Nachos replaced by Sprouts Chili Lime Rolled Corn Tortilla Chips"
+      ],
+      "matching_percentage": "33%",
+      "non_matching_percentage": "67%",
+      "confidence": 72
+    },
+    {
+      "level": "Shelf 2",
+      "planogram": [
+        "Chips Sara Sea Salt Clip Naret",
+        "Chips Sara Nacho Cheese Cup",
+        "Unidentified Chip",
+        "Unidentified Chip",
+        "Unidentified Chip",
+        "Unidentified Chips"
+      ],
+      "actual": [
+        "Sprouts Organic Yellow Corn Tortilla Chips Sea Salt",
+        "Sprouts Organic Yellow Corn Tortilla Chips Sea Salt",
+        "Sprouts Grain Free Tortilla Chips Sea Salt",
+        "Sprouts Organic Tortilla Chips Sea Salt",
+        "Sprouts Organic Tortilla Chips Sea Salt"
+      ],
+      "matches": [
+        "Chips Sara Sea Salt Clip Naret"
+      ],
+      "mismatches": [
+        "Chips Sara Nacho Cheese Cup replaced by Sprouts Organic Tortilla Chips Sea Salt",
+        "Unidentified Chip replaced by Sprouts Organic Yellow Corn Tortilla Chips Sea Salt",
+        "Unidentified Chip replaced by Sprouts Grain Free Tortilla Chips Sea Salt",
+        "Unidentified Chip replaced by Sprouts Organic Tortilla Chips Sea Salt",
+        "Unidentified Chips replaced by Sprouts Organic Yellow Corn Tortilla Chips Sea Salt"
+      ],
+      "matching_percentage": "17%",
+      "non_matching_percentage": "83%",
+      "confidence": 60
+    },
+    {
+      "level": "Shelf 3",
+      "planogram": [
+        "Chips Tortilla Rolled Chili Lime",
+        "Chips Tortilla Rolled Spicy Nacho"
+      ],
+      "actual": [
+        "Siete Grain Free Tortilla Chips Sea Salt",
+        "Siete Grain Free Tortilla Chips Sea Salt",
+        "Siete Grain Free Tortilla Chips Lime",
+        "Siete Grain Free Cinnamon Churro Strips",
+        "Siete Grain Free Tortilla Chips Dip Chips"
+      ],
+      "matches": []
+      ,
+      "mismatches": [
+        "Chips Tortilla Rolled Chili Lime replaced by Siete Grain Free Tortilla Chips Lime",
+        "Chips Tortilla Rolled Spicy Nacho replaced by Siete Grain Free Tortilla Chips Sea Salt",
+        "Unexpected product Siete Grain Free Cinnamon Churro Strips",
+        "Unexpected product Siete Grain Free Tortilla Chips Dip Chips"
+      ],
+      "matching_percentage": "0%",
+      "non_matching_percentage": "100%",
+      "confidence": 55
+    },
+    {
+      "level": "Shelf 4",
+      "planogram": [
+        "Pretzel Nuggets Maple Almond Butter Filled",
+        "Pretzel Nuggets Peanut Butter Filled"
+      ],
+      "actual": [
+        "Late July Organic Sea Salt Tortilla Chips",
+        "Late July Organic Sea Salt & Lime Tortilla Chips",
+        "Late July Organic Sea Salt & Lime Tortilla Chips",
+        "Late July Tortilla Chips"
+      ],
+      "matches": [],
+      "mismatches": [
+        "Pretzel Nuggets Maple Almond Butter Filled replaced by Late July Organic Sea Salt Tortilla Chips",
+        "Pretzel Nuggets Peanut Butter Filled replaced by Late July Organic Sea Salt & Lime Tortilla Chips",
+        "Unexpected product Late July Organic Sea Salt & Lime Tortilla Chips",
+        "Unexpected product Late July Tortilla Chips"
+      ],
+      "matching_percentage": "0%",
+      "non_matching_percentage": "100%",
+      "confidence": 96
+    },
+    {
+      "level": "Shelf 5",
+      "planogram": [
+        "Potato Chips Kettle Cooked Sea Salt",
+        "Potato Chips Kettle Chipotle BBQ",
+        "Potato Chips Kettle Sea Salt Vinegar"
+      ],
+      "actual": [],
+      "matches": [],
+      "mismatches": [
+        "Potato Chips Kettle Cooked Sea Salt missing",
+        "Potato Chips Kettle Chipotle BBQ missing",
+        "Potato Chips Kettle Sea Salt Vinegar missing"
+      ],
+      "matching_percentage": "0%",
+      "non_matching_percentage": "100%",
+      "confidence": 98
+    },
+    {
+      "level": "Shelf 6",
+      "planogram": [
+        "Chips Tortilla Nacho Cheese",
+        "Chips Tortilla Jalapeno Lime",
+        "Cinnamon Chips Churro Strips"
+      ],
+      "actual": [],
+      "matches": [],
+      "mismatches": [
+        "Chips Tortilla Nacho Cheese missing",
+        "Chips Tortilla Jalapeno Lime missing",
+        "Cinnamon Chips Churro Strips missing"
+      ],
+      "matching_percentage": "0%",
+      "non_matching_percentage": "100%",
+      "confidence": 98
+    }
+  ],
+  "summary": "Overall compliance is low at 23%, with major assortment deviations across all shelves. Shelves 3 to 6 show the largest gaps, including full shelf replacements and multiple missing planned products."
+}

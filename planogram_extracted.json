@@ -1,0 +1,56 @@
+{
+  "shelves": [
+    {
+      "shelf": 1,
+      "products": [
+        "ChipStore Lite Spicy Nachos",
+        "Chips Sara Lentil Aged Spicy Nachos",
+        "Chips Tortilla Chee Awie Chips",
+        "Chips Tortilla Rolled Nachos Cheese Bites",
+        "Chips Tortilla Rolled Smoky Led Nachos",
+        "Chips Tortilla Guacamole Nachos"
+      ]
+    },
+    {
+      "shelf": 2,
+      "products": [
+        "Chips Sara Sea Salt Clip Naret",
+        "Chips Sara Nacho Cheese Cup",
+        "Unidentified Chip",
+        "Unidentified Chip",
+        "Unidentified Chip",
+        "Unidentified Chips"
+      ]
+    },
+    {
+      "shelf": 3,
+      "products": [
+        "Chips Tortilla Rolled Chili Lime",
+        "Chips Tortilla Rolled Spicy Nacho"
+      ]
+    },
+    {
+      "shelf": 4,
+      "products": [
+        "Pretzel Nuggets Maple Almond Butter Filled",
+        "Pretzel Nuggets Peanut Butter Filled"
+      ]
+    },
+    {
+      "shelf": 5,
+      "products": [
+        "Potato Chips Kettle Cooked Sea Salt",
+        "Potato Chips Kettle Chipotle BBQ",
+        "Potato Chips Kettle Sea Salt Vinegar"
+      ]
+    },
+    {
+      "shelf": 6,
+      "products": [
+        "Chips Tortilla Nacho Cheese",
+        "Chips Tortilla Jalapeno Lime",
+        "Cinnamon Chips Churro Strips"
+      ]
+    }
+  ]
+}

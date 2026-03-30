@@ -1,0 +1,538 @@
+import os
+import base64
+import json
+import time
+import streamlit as st
+from openai import OpenAI
+from dotenv import load_dotenv
+from rapidfuzz import fuzz
+import re
+
+# ==============================
+# CONFIG
+# ==============================
+load_dotenv()
+
+st.set_page_config(page_title="Planogram AI", layout="wide", page_icon="📊")
+
+UPLOAD_FOLDER = "uploads"
+OUTPUT_JSON = "planogram_vs_actual_comparison.json"
+
+# ==============================
+# CLEAN OLD FILES ON START
+# ==============================
+FILES_TO_DELETE = [
+    "planogram_extracted.json",
+    "actual_extracted.json",
+    "planogram_vs_actual_comparison.json"
+]
+
+for file in FILES_TO_DELETE:
+    if os.path.exists(file):
+        os.remove(file)
+
+
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+client = OpenAI(
+    api_key=os.environ.get("AZURE_OPENAI_KEY"),
+    base_url=os.environ.get("AZURE_OPENAI_ENDPOINT")
+)
+
+# ==============================
+# CLEAN PRODUCT NAME
+# ==============================
+def clean_product_name(name: str) -> str:
+    if not isinstance(name, str) or not name.strip():
+        return "Unidentified Product"
+    
+    name = str(name).strip()
+    # Remove any HTML garbage
+    name = re.sub(r'<[^>]+>', '', name)
+    name = re.sub(r'class="[^"]*"', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'div class=', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'\s+', ' ', name).strip()
+    
+    return name if len(name) > 3 else "Unidentified Product"
+
+# ==============================
+# HELPERS
+# ==============================
+def save_uploaded_file(uploaded_file, filename):
+    path = os.path.join(UPLOAD_FOLDER, filename)
+    with open(path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    return path
+
+def encode_image(image_path):
+    with open(image_path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("utf-8")
+    if image_path.lower().endswith((".jpg", ".jpeg")):
+        return f"data:image/jpeg;base64,{b64}"
+    return f"data:image/png;base64,{b64}"
+
+# ==============================
+# 3-STEP LLM FUNCTIONS
+# ==============================
+def extract_planogram(planogram_path):
+    # st.info("📋 Step 1: Extracting from Planogram...")
+    
+    system_prompt = """
+You are an expert at reading retail planograms. 
+Extract products shelf by shelf. Use short, clean product names (Brand + Flavor + Type).
+If text is unclear, use "Unidentified [Category]".
+Return ONLY JSON.
+"""
+
+    response = client.responses.create(
+        model=os.environ["AZURE_OPENAI_MODEL"],
+        input=[
+            {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+            {"role": "user", "content": [
+                {"type": "input_text", "text": "Extract products shelf by shelf from this PLANOGRAM. Return ONLY JSON."},
+                {"type": "input_image", "image_url": encode_image(planogram_path)}
+            ]}
+        ]
+    )
+
+    result = response.output_text.strip()
+    if result.startswith("```"):
+        result = result.split("```")[1].replace("json", "").strip()
+
+    with open("planogram_extracted.json", "w", encoding="utf-8") as f:
+        f.write(result)
+
+    data = json.loads(result)
+    for shelf in data.get("shelves", []):
+        shelf["products"] = [clean_product_name(p) for p in shelf.get("products", [])]
+    return data
+
+
+def extract_actual(actual_path):
+    # st.info("📷 Step 2: Extracting from Actual Shelf...")
+
+    system_prompt = """
+You are an expert at reading real retail shelf photos.
+List all visible products shelf by shelf using short clean names.
+Return ONLY valid JSON.
+"""
+
+    response = client.responses.create(
+        model=os.environ["AZURE_OPENAI_MODEL"],
+        input=[
+            {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+            {"role": "user", "content": [
+                {"type": "input_text", "text": "Extract all visible products from this ACTUAL shelf photo. Return ONLY JSON."},
+                {"type": "input_image", "image_url": encode_image(actual_path)}
+            ]}
+        ]
+    )
+
+    result = response.output_text.strip()
+    if result.startswith("```"):
+        result = result.split("```")[1].replace("json", "").strip()
+
+    with open("actual_extracted.json", "w", encoding="utf-8") as f:
+        f.write(result)
+
+    data = json.loads(result)
+    for shelf in data.get("shelves", []):
+        shelf["products"] = [clean_product_name(p) for p in shelf.get("products", [])]
+    return data
+
+
+def compare_planogram_vs_actual(planogram_data, actual_data):
+    # st.info("🔍 Step 3: Comparing Planogram vs Actual...")
+
+    comparison_prompt = f"""
+You are an expert retail planogram compliance analyst specializing in noisy, real-world shelf data.
+
+Your task is to compare the expected planogram with the observed shelf data and produce a structured compliance report.
+
+-----------------------
+INPUT DATA
+-----------------------
+Planogram (Expected):
+{json.dumps(planogram_data, indent=2)}
+
+Actual Shelf (Observed):
+{json.dumps(actual_data, indent=2)}
+
+-----------------------
+MATCHING LOGIC (CRITICAL)
+-----------------------
+- Perform comparison shelf-by-shelf (level-by-level)
+- Match products using FUZZY LOGIC, not exact string match:
+  - Ignore case differences
+  - Ignore minor spelling variations
+  - Ignore brand prefixes/suffixes if core product matches
+  - Example:
+    - "Coca Cola 500ml" ≈ "Coke 500 ml"
+    - "Lays Classic Chips" ≈ "Lays Classic"
+- If similarity >= ~70%, consider it a MATCH
+
+-----------------------
+POSITION HANDLING
+-----------------------
+- If same product exists but position differs → still MATCH
+- Do NOT penalize for left/center/right differences
+- Focus ONLY on product presence per shelf
+
+-----------------------
+MISMATCH RULES
+-----------------------
+- If expected product is missing → mark as:
+  "Product A missing"
+- If a different product appears instead → mark as:
+  "Product A replaced by Product X"
+- If extra product exists not in planogram → mark as:
+  "Unexpected product X"
+
+-----------------------
+PERCENTAGE CALCULATION
+-----------------------
+For EACH shelf:
+- matching_percentage = (matched_items / total_planogram_items) * 100
+- non_matching_percentage = 100 - matching_percentage
+
+Overall:
+- Aggregate across all shelves using total counts (not average of percentages)
+
+-----------------------
+CONFIDENCE SCORING
+-----------------------
+- 90–100 → clear readable match
+- 75–89 → minor fuzziness
+- 60–74 → uncertain/partial match
+- <60 → poor data quality
+
+-----------------------
+OUTPUT FORMAT (STRICT)
+-----------------------
+Return ONLY valid JSON (no explanation, no markdown):
+
+{{
+  "overall_compliance": {{
+    "matching_percentage": "XX%",
+    "non_matching_percentage": "YY%",
+    "confidence": 85
+  }},
+  "shelves": [
+    {{
+      "level": "Shelf 1",
+      "planogram": ["Product A", "Product B"],
+      "actual": ["Product X", "Product Y"],
+      "matches": ["Product A"],
+      "mismatches": [
+        "Product B replaced by Product X"
+      ],
+      "matching_percentage": "XX%",
+      "non_matching_percentage": "YY%",
+      "confidence": 90
+    }}
+  ],
+  "summary": "Clear 1-2 line summary highlighting compliance level, major gaps, and missing products."
+}}
+
+-----------------------
+STRICT RULES
+-----------------------
+- Output MUST be valid JSON
+- Do NOT include explanations or extra text
+- Do NOT use arrows (→), HTML, or special characters
+- Use SHORT, CLEAN product names (remove noise like size if not essential)
+- Do NOT hallucinate products not present in input
+- Ensure every shelf in planogram is included in output
+- If a shelf has no matches → matches = []
+- If a shelf has no mismatches → mismatches = []
+
+"""
+
+
+    response = client.responses.create(
+        model=os.environ["AZURE_OPENAI_MODEL"],
+        input=[
+            {"role": "system", "content": [{"type": "input_text", "text": comparison_prompt}]}
+        ]
+    )
+
+    result = response.output_text.strip()
+    if result.startswith("```"):
+        result = result.split("```")[1].replace("json", "").strip()
+
+    with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
+        f.write(result)
+
+    data = json.loads(result)
+    
+    # Final cleaning
+    for shelf in data.get("shelves", []):
+        shelf["planogram"] = [clean_product_name(p) for p in shelf.get("planogram", [])]
+        shelf["actual"] = [clean_product_name(p) for p in shelf.get("actual", [])]
+    
+    return data
+
+
+# ==============================
+# MAIN APP
+# ==============================
+st.markdown("""
+<div class="planogram-header">
+    <span class="logo">📊 Planogram Compliance AI</span>
+    <span class="badge">3-STEP ANALYSIS</span>
+</div>
+""", unsafe_allow_html=True)
+
+
+
+col1, col2 = st.columns(2)
+with col1:
+    st.markdown('<div style="font-weight:600; margin-bottom:4px;">🗂 Planogram Image</div>', unsafe_allow_html=True)
+    planogram_file = st.file_uploader("", type=["jpg", "jpeg", "png"], key="plan")
+
+with col2:
+    st.markdown('<div style="font-weight:600; margin-bottom:4px;">📷 Actual Shelf Photo</div>', unsafe_allow_html=True)
+    actual_file = st.file_uploader("", type=["jpg", "jpeg", "png"], key="shelf")
+
+if planogram_file or actual_file:
+    st.markdown('<hr>', unsafe_allow_html=True)
+    prev1, prev2 = st.columns(2)
+    with prev1:
+        if planogram_file:
+            st.image(planogram_file, caption="Planogram")
+    with prev2:
+        if actual_file:
+            st.image(actual_file, caption="Actual Shelf")
+
+run_clicked = st.button("🚀 Run 3-Step Compliance Check", disabled=not (planogram_file and actual_file), type="primary")
+
+if run_clicked:
+    if not planogram_file or not actual_file:
+        st.error("Please upload both images.")
+        st.stop()
+
+    progress = st.progress(0)
+    logs_ui = st.empty()
+    logs = []
+
+    def log(msg):
+        logs.append(f"› {msg}")
+        logs_ui.markdown(f'<div style="background:#1a1916;color:#a8e6cf;font-family:monospace;padding:12px;border-radius:8px;white-space:pre-wrap;">{"<br>".join(logs)}</div>', unsafe_allow_html=True)
+
+    try:
+        log("Saving uploaded images...")
+        plan_path = save_uploaded_file(planogram_file, "planogram.jpg")
+        actual_path = save_uploaded_file(actual_file, "actual.jpg")
+        progress.progress(20)
+
+        log("Step 1/3: Extracting Planogram...")
+        planogram_data = extract_planogram(plan_path)
+        progress.progress(45)
+
+        log("Step 2/3: Extracting Actual Shelf...")
+        actual_data = extract_actual(actual_path)
+        progress.progress(70)
+
+        log("Step 3/3: Comparing Planogram vs Actual...")
+        data = compare_planogram_vs_actual(planogram_data, actual_data)
+        progress.progress(95)
+
+        log("✅ Analysis completed successfully!")
+        # st.success("✅ Compliance Analysis Complete!")
+        progress.progress(100)
+
+        st.session_state["result"] = data
+        time.sleep(0.8)
+
+    except Exception as e:
+        st.error(f"❌ Error: {str(e)}")
+        log(f"ERROR: {str(e)}")
+        st.stop()
+    finally:
+        time.sleep(1)
+        progress.empty()
+
+
+
+
+# ==============================
+# RESULTS DISPLAY (MERGED)
+# ==============================
+
+data = st.session_state.get("result", None)
+
+st.markdown("---")
+st.title("🛒 Planogram Compliance Dashboard")
+
+if data:
+
+    import pandas as pd
+    import plotly.express as px
+
+    st.markdown("### Shelf-wise Product Compliance Analysis")
+
+    # ====================== OVERALL ======================
+    st.header("Overall Compliance")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("Matching Products", data["overall_compliance"]["matching_percentage"])
+
+    with col2:
+        st.metric("Non-Matching Products", data["overall_compliance"]["non_matching_percentage"])
+
+    with col3:
+        st.metric("Confidence Score", f"{data['overall_compliance']['confidence']}%")
+
+    st.progress(int(data["overall_compliance"]["matching_percentage"].replace("%", "")) / 100)
+
+    # ====================== SHELF DATA ======================
+    shelf_data = []
+    for shelf in data["shelves"]:
+        shelf_data.append({
+            "Shelf": shelf["level"],
+            "Matching %": int(shelf["matching_percentage"].replace("%", "")),
+            "Non-Matching %": int(shelf["non_matching_percentage"].replace("%", "")),
+            "Confidence": shelf["confidence"],
+            "Matches": len(shelf["matches"]),
+            "Mismatches": len(shelf["mismatches"])
+        })
+
+    df = pd.DataFrame(shelf_data)
+
+    # ====================== SHELF METRICS ======================
+    st.header("Shelf-wise Compliance")
+
+    cols = st.columns(len(df))
+
+    for i, row in df.iterrows():
+        with cols[i]:
+            st.subheader(row["Shelf"])
+            st.metric("Compliance", f"{row['Matching %']}%", delta=f"{row['Matches']} matched")
+            st.progress(row['Matching %'] / 100)
+
+    # ====================== BAR CHART ======================
+    st.subheader("Compliance Rate by Shelf")
+
+    fig = px.bar(
+        df,
+        x="Shelf",
+        y="Matching %",
+        text="Matching %",
+        color="Matching %",
+        color_continuous_scale="RdYlGn"
+    )
+    fig.update_traces(texttemplate='%{text}%', textposition='outside')
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ====================== DETAILS ======================
+    st.header("Detailed Shelf Analysis")
+
+    tab1, tab2, tab3 = st.tabs(["📋 All Shelves", "✅ Matches", "❌ Mismatches"])
+
+    with tab1:
+        for shelf in data["shelves"]:
+            with st.expander(f"{shelf['level']} — {shelf['matching_percentage']}"):
+                col_a, col_b = st.columns(2)
+
+                with col_a:
+                    st.write("**Planogram:**")
+                    for item in shelf["planogram"]:
+                        st.write(f"• {item}")
+
+                with col_b:
+                    st.write("**Actual:**")
+                    for item in shelf["actual"]:
+                        st.write(f"• {item}")
+
+                if shelf["matches"]:
+                    st.success("Matches:")
+                    for m in shelf["matches"]:
+                        st.write(f"✓ {m}")
+
+                if shelf["mismatches"]:
+                    st.error("Mismatches:")
+                    for mis in shelf["mismatches"]:
+                        st.write(f"✗ {mis}")
+
+    with tab2:
+        for shelf in data["shelves"]:
+            for match in shelf["matches"]:
+                st.success(f"{shelf['level']}: {match}")
+
+    with tab3:
+        for shelf in data["shelves"]:
+            for mismatch in shelf["mismatches"]:
+                st.error(f"{shelf['level']}: {mismatch}")
+
+    # ====================== SUMMARY ======================
+    st.header("📝 Executive Summary")
+    st.info(data["summary"])
+
+
+
+# ==============================
+# DEBUG / RAW JSON VIEW
+# ==============================
+
+st.markdown("---")
+st.header("🔍 Raw JSON Outputs (All 3 Steps)")
+
+tab1, tab2, tab3 = st.tabs([
+    "📋 Planogram Extracted",
+    "📷 Actual Extracted",
+    "🔍 Final Comparison"
+])
+
+# -------- PLANOGRAM --------
+with tab1:
+    try:
+        with open("planogram_extracted.json") as f:
+            plan_data = json.load(f)
+
+        st.subheader("Planogram JSON")
+        st.json(plan_data)
+
+        st.download_button(
+            "⬇️ Download Planogram JSON",
+            data=json.dumps(plan_data, indent=2),
+            file_name="planogram_extracted.json"
+        )
+    except:
+        st.warning("Planogram JSON not available")
+
+# -------- ACTUAL --------
+with tab2:
+    try:
+        with open("actual_extracted.json") as f:
+            actual_data = json.load(f)
+
+        st.subheader("Actual Shelf JSON")
+        st.json(actual_data)
+
+        st.download_button(
+            "⬇️ Download Actual JSON",
+            data=json.dumps(actual_data, indent=2),
+            file_name="actual_extracted.json"
+        )
+    except:
+        st.warning("Actual JSON not available")
+
+# -------- FINAL --------
+with tab3:
+    try:
+        final_data = st.session_state.get("result")
+
+        st.subheader("Comparison JSON")
+        st.json(final_data)
+
+        st.download_button(
+            "⬇️ Download Final JSON",
+            data=json.dumps(final_data, indent=2),
+            file_name="planogram_vs_actual_comparison.json"
+        )
+    except:
+        st.warning("Final JSON not available")    
