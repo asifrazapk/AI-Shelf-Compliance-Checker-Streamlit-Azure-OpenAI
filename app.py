@@ -72,6 +72,30 @@ def save_uploaded_file(uploaded_file, filename):
         f.write(uploaded_file.getbuffer())
     return path
 
+def save_uploaded_file_high_quality(uploaded_file, base_name: str):
+    unique_no = st.session_state["unique_no"]
+    name, ext = os.path.splitext(base_name)
+    unique_filename = f"{name}_{unique_no}{ext.lower()}"
+    save_path = os.path.join(UPLOAD_FOLDER, unique_filename)
+
+    # Open with PIL and preserve maximum quality
+    img = Image.open(uploaded_file)
+    img = ImageOps.exif_transpose(img)   # Fix orientation
+
+    # Optional: Resize only if extremely large (to avoid token explosion)
+    max_dim = 2500  # OpenAI high-res sweet spot is around 2048-2500
+    if max(img.size) > max_dim:
+        ratio = max_dim / max(img.size)
+        new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+        img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+    # Save with maximum quality
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+    
+    img.save(save_path, quality=95, optimize=True, subsampling=0)
+    return save_path
+
 def save_json(result, name, folder="outputs"):
 
     unique_no = st.session_state.get("unique_no")
@@ -658,7 +682,7 @@ if menu == "💰 Price Extraction":
 
     if  st.button("Extract Prices",  disabled=not uploaded_file_price_extraction) :
         with st.spinner("Extracting prices..."):
-            file_path = save_uploaded_file(uploaded_file_price_extraction, "actual_price.jpg")
+            file_path = save_uploaded_file_high_quality(uploaded_file_price_extraction, "actual_price.jpg")
             st.session_state.price_data = extract_prices(file_path)
 
     price_data = st.session_state.price_data
