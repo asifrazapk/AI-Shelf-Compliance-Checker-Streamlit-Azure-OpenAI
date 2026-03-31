@@ -549,7 +549,27 @@ Important:
 
 def extract_prices_from_image(image_path):
     
-    image_base64 = load_image_to_base64(image_path)
+    def preprocess_image_for_llm(image_path):
+        img = cv2.imread(image_path)
+
+        # Resize to optimal width (VERY IMPORTANT)
+        h, w = img.shape[:2]
+        scale = 1200 / w
+        img = cv2.resize(img, (1200, int(h * scale)))
+
+        # Sharpen
+        kernel = np.array([[0, -1, 0],
+                        [-1, 5,-1],
+                        [0, -1, 0]])
+        img = cv2.filter2D(img, -1, kernel)
+
+        # Save temp
+        temp_path = image_path.replace(".jpg", "_processed.jpg")
+        cv2.imwrite(temp_path, img)
+
+        return temp_path
+
+    image_base64 = load_image_to_base64(preprocess_image_for_llm(image_path))
     data_url = create_data_url(image_base64, mime="image/jpg")
     
     response = client.responses.create(
