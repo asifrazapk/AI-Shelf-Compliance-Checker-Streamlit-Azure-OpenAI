@@ -1,5 +1,6 @@
 import re
 import os
+import uuid
 import cv2
 import json
 import time
@@ -17,29 +18,23 @@ load_dotenv()
 st.set_page_config(page_title="Planogram AI", layout="wide", page_icon="📊")
 
 UPLOAD_FOLDER = "uploads"
+JSON_FOLDER = "outputs"
+
+ACTUAL_JSON = "actual_extracted.json"
+PLANOGRAM_JSON = "planogram_extracted.json"
 OUTPUT_JSON = "planogram_vs_actual_comparison.json"
-
-# ==============================
-# CLEAN OLD FILES ON START
-# ==============================
-FILES_TO_DELETE = [
-    "planogram_extracted.json",
-    "actual_extracted.json",
-    "planogram_vs_actual_comparison.json"
-]
-
-for file in FILES_TO_DELETE:
-    if os.path.exists(file):
-        os.remove(file)
-
-
+PRICE_JSON = "price_extracted.json"
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(JSON_FOLDER, exist_ok=True)
 
 client = OpenAI(
     api_key=os.environ.get("AZURE_OPENAI_KEY"),
     base_url=os.environ.get("AZURE_OPENAI_ENDPOINT")
 )
+
+if "unique_no" not in st.session_state:
+    st.session_state["unique_no"] = uuid.uuid4().hex[:8]
 
 # ==============================
 # CLEAN PRODUCT NAME
@@ -60,11 +55,27 @@ def clean_product_name(name: str) -> str:
 # ==============================
 # HELPERS
 # ==============================
+
 def save_uploaded_file(uploaded_file, filename):
-    path = os.path.join(UPLOAD_FOLDER, filename)
+    # Split name and extension
+    name, ext = os.path.splitext(filename)
+    unique_no = st.session_state.get("unique_no")
+    unique_filename = f"{name}_{unique_no}{ext}"
+    path = os.path.join(UPLOAD_FOLDER, unique_filename)
     with open(path, "wb") as f:
         f.write(uploaded_file.getbuffer())
     return path
+
+def save_json(result, name, folder="outputs"):
+
+    unique_no = st.session_state.get("unique_no")
+    file_name = f"{name}_{unique_no}.json"
+    file_path = os.path.join(folder, file_name)
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+    st.session_state[name] = file_path
+    return file_path
+
 
 def encode_image(image_path):
     with open(image_path, "rb") as f:
@@ -101,8 +112,8 @@ Return ONLY JSON.
     if result.startswith("```"):
         result = result.split("```")[1].replace("json", "").strip()
 
-    with open("planogram_extracted.json", "w", encoding="utf-8") as f:
-        f.write(result)
+    json_path = save_json(result, "planogram_extracted")
+    # st.write(f"📄 JSON saved at: {json_path}")
 
     data = json.loads(result)
     for shelf in data.get("shelves", []):
@@ -178,8 +189,8 @@ Return strictly valid JSON:
     if result.startswith("```"):
         result = result.split("```")[1].replace("json", "").strip()
 
-    with open("actual_extracted.json", "w", encoding="utf-8") as f:
-        f.write(result)
+    json_path = save_json(result, "actual_extracted")
+    # st.write(f"📄 JSON saved at: {json_path}")
 
     data = json.loads(result)
     for shelf in data.get("shelves", []):
@@ -306,8 +317,8 @@ STRICT RULES
     if result.startswith("```"):
         result = result.split("```")[1].replace("json", "").strip()
 
-    with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
-        f.write(result)
+    json_path = save_json(result, "planogram_vs_actual_comparison")
+    # st.write(f"📄 JSON saved at: {json_path}")
 
     data = json.loads(result)
     
@@ -428,25 +439,53 @@ def extract_prices_from_image(image_path):
     
     result = response.output_text.strip().replace("```json", "").replace("```", "")
     data = json.loads(result)
-    with open("price_extracted.json", "w") as f:
-        json.dump(data, f, indent=2)
+    
+    # with open("price_extracted.json", "w") as f:
+    #     json.dump(data, f, indent=2)
+
+    json_path = save_json(data, "price_extracted")
+
     return data
 
 
-def deblur_image(image_path, output_path, iterations=15):
-    """Apply deblurring to image and save result"""
+# def deblur_image(image_path, output_path, iterations=15):
+#     """Apply deblurring to image and save result"""
     
+#     deblurrer = ImageDeblurrer()
+#     img = cv2.imread(image_path)
+#     result = deblurrer.deblur(img, iterations=iterations)
+#     cv2.imwrite(output_path, result)
+    
+#     return result
+
+def deblur_image(image_path, output_path=None, iterations=15):
+    """Apply deblurring to image and save result"""
+
     deblurrer = ImageDeblurrer()
     img = cv2.imread(image_path)
     result = deblurrer.deblur(img, iterations=iterations)
+
+    unique_no = st.session_state.get("unique_no")
+
+    # Generate unique output path if not provided
+    if output_path is None:
+        # unique_name = f"deblurred_{uuid.uuid4().hex[:8]}.jpg"
+        unique_name = f"deblurred_{unique_no}.jpg"
+        output_path = os.path.join("uploads", unique_name)
+
     cv2.imwrite(output_path, result)
-    
-    return result
+    return result, output_path
+
+# def extract_prices(path):
+#     deblur_image(path, "uploads/deblurred_true.jpg", iterations=12)
+#     data = extract_prices_from_image("uploads/deblurred_true.jpg")
+#     return data
 
 def extract_prices(path):
-    deblur_image(path, "uploads/deblurred_true.jpg", iterations=12)
-    data = extract_prices_from_image("uploads/deblurred_true.jpg")
+    _, deblurred_path = deblur_image(path, iterations=12)
+    data = extract_prices_from_image(deblurred_path)
     return data
+
 
 # ==============================
 # MAIN APP
@@ -468,21 +507,19 @@ if menu == "💰 Price Extraction":
     if "price_data" not in st.session_state:
         st.session_state.price_data = None
 
-    uploaded_file = st.file_uploader(
+    uploaded_file_price_extraction = st.file_uploader(
         "Upload Shelf Image for Price Extraction",
         type=["jpg", "png"]
     )
 
     # Show smaller image preview
-    if uploaded_file:
-        st.image(uploaded_file, caption="Shelf Image", width=300)  # set width as needed
+    if uploaded_file_price_extraction:
+        st.image(uploaded_file_price_extraction, caption="Shelf Image", width=300)  # set width as needed
 
     # Process button (prevents auto re-run issues)
-    if  st.button("Extract Prices",  disabled=not uploaded_file) :
-
+    if  st.button("Extract Prices",  disabled=not uploaded_file_price_extraction) :
         with st.spinner("Extracting prices..."):
-
-            file_path = save_uploaded_file(uploaded_file, "actual_price.jpg")
+            file_path = save_uploaded_file(uploaded_file_price_extraction, "actual_price.jpg")
             st.session_state.price_data = extract_prices(file_path)    
 
     price_data = st.session_state.price_data
@@ -756,36 +793,54 @@ else:
     # -------- PLANOGRAM --------
     with tab1:
         try:
-            with open("planogram_extracted.json") as f:
-                plan_data = json.load(f)
+            if "unique_no" in st.session_state:
+                unique_no = st.session_state["unique_no"]
+                plan_file = f"outputs/planogram_extracted_{unique_no}.json"
+            else:
+                plan_file = "planogram_extracted.json"  # fallback
 
-            st.subheader("Planogram JSON")
-            st.json(plan_data)
+            if os.path.exists(plan_file):
+                with open(plan_file, "r", encoding="utf-8") as f:
+                    plan_data = json.load(f)
 
-            st.download_button(
-                "⬇️ Download Planogram JSON",
-                data=json.dumps(plan_data, indent=2),
-                file_name="planogram_extracted.json"
-            )
-        except:
-            st.warning("Planogram JSON not available")
+                st.subheader("Planogram JSON")
+                st.json(plan_data)
+
+                st.download_button(
+                    "⬇️ Download Planogram JSON",
+                    data=json.dumps(plan_data, indent=2),
+                    file_name=os.path.basename(plan_file)
+                )
+            else:
+                st.warning("Planogram JSON not available")
+        except Exception as e:
+            st.error(f"Error loading Planogram JSON: {e}")
 
     # -------- ACTUAL --------
     with tab2:
         try:
-            with open("actual_extracted.json") as f:
-                actual_data = json.load(f)
+            if "unique_no" in st.session_state:
+                unique_no = st.session_state["unique_no"]
+                actual_file = f"outputs/actual_extracted_{unique_no}.json"
+            else:
+                actual_file = "actual_extracted.json"  # fallback
 
-            st.subheader("Actual Shelf JSON")
-            st.json(actual_data)
+            if os.path.exists(actual_file):
+                with open(actual_file, "r", encoding="utf-8") as f:
+                    actual_data = json.load(f)
 
-            st.download_button(
-                "⬇️ Download Actual JSON",
-                data=json.dumps(actual_data, indent=2),
-                file_name="actual_extracted.json"
-            )
-        except:
-            st.warning("Actual JSON not available")
+                st.subheader("Actual Shelf JSON")
+                st.json(actual_data)
+
+                st.download_button(
+                    "⬇️ Download Actual JSON",
+                    data=json.dumps(actual_data, indent=2),
+                    file_name=os.path.basename(actual_file)
+                )
+            else:
+                st.warning("Actual JSON not available")
+        except Exception as e:
+            st.error(f"Error loading Actual JSON: {e}")
 
     # -------- FINAL --------
     with tab3:
@@ -798,7 +853,20 @@ else:
             st.download_button(
                 "⬇️ Download Final JSON",
                 data=json.dumps(final_data, indent=2),
-                file_name="planogram_vs_actual_comparison.json"
+                file_name=f"planogram_vs_actual_comparison_{st.session_state.get('unique_no','latest')}.json"
             )
-        except:
-            st.warning("Final JSON not available")    
+        except Exception as e:
+            st.warning("Final JSON not available")
+            try:
+                final_data = st.session_state.get("result")
+
+                st.subheader("Comparison JSON")
+                st.json(final_data)
+
+                st.download_button(
+                    "⬇️ Download Final JSON",
+                    data=json.dumps(final_data, indent=2),
+                    file_name="planogram_vs_actual_comparison.json"
+                )
+            except:
+                st.warning("Final JSON not available")    
