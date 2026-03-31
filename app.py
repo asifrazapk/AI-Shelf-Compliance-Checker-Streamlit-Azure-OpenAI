@@ -542,13 +542,11 @@ Extract all visible shelf price tags along with the most likely product name and
 Important:
 - First read the price tags exactly.
 - Then match each tag to the nearest product above it.
-- If a price may be 4.59 vs 4.99, do not guess; mark it uncertain.
 - If a product-to-tag match is ambiguous, lower confidence.
 """
 
 
 def extract_prices_from_image(image_path):
-    
     
     image_base64 = load_image_to_base64(image_path)
     data_url = create_data_url(image_base64, mime="image/jpg")
@@ -636,7 +634,6 @@ if menu == "💰 Price Extraction":
 
     st.header("Price Extraction")
 
-    # Initialize state (important)
     if "price_data" not in st.session_state:
         st.session_state.price_data = None
 
@@ -645,31 +642,46 @@ if menu == "💰 Price Extraction":
         type=["jpg", "png"]
     )
 
-    # Show smaller image preview
     if uploaded_file_price_extraction:
-        st.image(uploaded_file_price_extraction, caption="Shelf Image", width=300)  # set width as needed
+        from PIL import Image, ImageOps
+        img = Image.open(uploaded_file_price_extraction)
+        img = ImageOps.exif_transpose(img)
+        col1, col2, col3 = st.columns([1, 2, 1])
 
-    # Process button (prevents auto re-run issues)
+        with col2:
+            st.image(
+                img,
+                caption="Actual Shelf",
+                width=400
+            )
+        # st.image(uploaded_file_price_extraction, caption="Shelf Image", width=300)  # set width as needed
+
     if  st.button("Extract Prices",  disabled=not uploaded_file_price_extraction) :
         with st.spinner("Extracting prices..."):
             file_path = save_uploaded_file(uploaded_file_price_extraction, "actual_price.jpg")
-            st.session_state.price_data = extract_prices(file_path)    
+            st.session_state.price_data = extract_prices(file_path)
 
     price_data = st.session_state.price_data
 
-    # ================= RESULT =================
     if price_data and "prices" in price_data:
 
         import pandas as pd
         import plotly.express as px
 
         df = pd.DataFrame(price_data["prices"])
-
-        # Convert price to numeric (IMPORTANT)
         df["price"] = pd.to_numeric(df["price"], errors="coerce")
 
-        st.subheader("Extracted Prices")
-        st.dataframe(df, use_container_width=True)
+        st.subheader("Price Extraction Framework")
+        # ================= GROUP BY SHELF =================
+        for shelf in df["shelf_level"].dropna().unique():
+
+            subset = df[df["shelf_level"] == shelf]
+
+            if not subset.empty:
+                st.markdown(f"### {str(shelf).capitalize()} Shelf")
+                st.dataframe(subset, use_container_width=True)
+
+        col1, col2 = st.columns([1.2, 1])
 
         # ================= Metrics =================
         col1, col2, col3 = st.columns(3)
