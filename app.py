@@ -1,3 +1,4 @@
+
 import re
 import os
 import uuid
@@ -25,8 +26,14 @@ PLANOGRAM_JSON = "planogram_extracted.json"
 OUTPUT_JSON = "planogram_vs_actual_comparison.json"
 PRICE_JSON = "price_extracted.json"
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+JSON_FOLDER = os.path.join(BASE_DIR, "outputs")
+
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(JSON_FOLDER, exist_ok=True)
+
 
 client = OpenAI(
     api_key=os.environ.get("AZURE_OPENAI_KEY"),
