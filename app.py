@@ -1,4 +1,3 @@
-
 import re
 import os
 import uuid
@@ -87,6 +86,7 @@ def save_json(result, name, folder="outputs"):
 def encode_image(image_path):
     with open(image_path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode("utf-8")
+
     if image_path.lower().endswith((".jpg", ".jpeg")):
         return f"data:image/jpeg;base64,{b64}"
     return f"data:image/png;base64,{b64}"
@@ -98,10 +98,56 @@ def extract_planogram(planogram_path):
     # st.info("📋 Step 1: Extracting from Planogram...")
     
     system_prompt = """
-You are an expert at reading retail planograms. 
-Extract products shelf by shelf. Use short, clean product names (Brand + Flavor + Type).
-If text is unclear, use "Unidentified [Category]".
-Return ONLY JSON.
+You are a highly precise retail shelf image parser.
+
+Your task is to extract products from a real shelf image with STRICT visual grounding.
+
+CRITICAL RULES (MUST FOLLOW):
+
+1. ORDERING (VERY IMPORTANT):
+- Always process shelves from TOP to BOTTOM.
+- Within each shelf, read products from LEFT to RIGHT.
+- Do NOT skip or reorder shelves.
+
+2. NO HALLUCINATION:
+- Only extract products that are clearly visible in the image.
+- Do NOT guess, infer, or complete missing text.
+- If a product is blurry or unreadable, label it as:
+  "Unidentified [Category]" (e.g., "Unidentified Beverage", "Unidentified Snack")
+
+3. VISUAL GROUNDING:
+- Every product must correspond to an actual visible item.
+- Do NOT add products that are not present.
+- Do NOT merge multiple products into one.
+
+4. NAMING FORMAT:
+- Use short, clean names: Brand + Variant/Flavor + Type
+  Example: "Lay's Classic Chips", "Coca-Cola Regular Can"
+- Avoid extra words, descriptions, or assumptions.
+
+5. SHELF STRUCTURE:
+- Maintain exact shelf grouping.
+- Each shelf should be a separate list.
+- Preserve product count per shelf as seen.
+
+6. OUTPUT FORMAT (STRICT JSON ONLY):
+{
+  "shelves": [
+    {
+      "shelf_number": 1,
+      "products": ["Product 1", "Product 2", ...]
+    },
+    {
+      "shelf_number": 2,
+      "products": [...]
+    }
+  ]
+}
+
+7. DO NOT:
+- Do not explain anything
+- Do not add comments
+- Do not return anything except JSON
 """
 
     response = client.responses.create(
@@ -127,66 +173,69 @@ Return ONLY JSON.
         shelf["products"] = [clean_product_name(p) for p in shelf.get("products", [])]
     return data
 
-
 def extract_actual(actual_path):
-    # st.info("📷 Step 2: Extracting from Actual Shelf...")
-
+    # st.info("📋 Step 1: Extracting from Planogram...")
+    
     system_prompt = """
-You are an AI system specialized in retail shelf analysis from images.
+You are a highly precise retail shelf image parser.
 
-The image may contain blurry or small text. You must carefully extract information without guessing incorrectly.
+Your task is to extract products from a real shelf image with STRICT visual grounding.
 
-Tasks:
-1. Detect all visible price tags and item name on the shelf.
-2. Extract the price value (e.g., 4.99, 6.99).
-3. Handle blurry text:
-   - If the price is slightly blurry but readable, extract it.
-   - If the price is NOT clearly readable, ignore it (do NOT guess).
-4. Identify the associated product:
-   - Look directly ABOVE the price tag for the product.
-   - Extract product name from visible packaging text.
-5. Determine:
-   - Shelf level (top = 1st, then 2nd, 3rd, etc.)
-   - Horizontal position (left, center, right)
-6. Assign a confidence score (0–100) based on:
-   - Text clarity (sharp vs blurry)
-   - Visibility of the price tag
-   - Certainty of product association
+CRITICAL RULES (MUST FOLLOW):
 
-Confidence Guidelines:
-- 90–100: very clear price and product
-- 70–89: readable but slightly blurry
-- 30–69: partially unclear but likely correct
-- Below 30: DO NOT include the item
+1. ORDERING (VERY IMPORTANT):
+- Always process shelves from TOP to BOTTOM.
+- Within each shelf, read products from LEFT to RIGHT.
+- Do NOT skip or reorder shelves.
 
-Rules:s
-- Only return valid prices (must contain decimals like 4.99)
-- Do NOT hallucinate missing prices or product names
-- If unsure, skip the item entirely
-- Keep product_hint short (2–4 words max)
-- Confidence must be an integer (no % sign)
+2. NO HALLUCINATION:
+- Only extract products that are clearly visible in the image.
+- Do NOT guess, infer, or complete missing text.
+- If a product is blurry or unreadable, label it as:
+  "Unidentified [Category]" (e.g., "Unidentified Beverage", "Unidentified Snack")
 
-Return strictly valid JSON:
+3. VISUAL GROUNDING:
+- Every product must correspond to an actual visible item.
+- Do NOT add products that are not present.
+- Do NOT merge multiple products into one.
 
+4. NAMING FORMAT:
+- Use short, clean names: Brand + Variant/Flavor + Type
+  Example: "Lay's Classic Chips", "Coca-Cola Regular Can"
+- Avoid extra words, descriptions, or assumptions.
+
+5. SHELF STRUCTURE:
+- Maintain exact shelf grouping.
+- Each shelf should be a separate list.
+- Preserve product count per shelf as seen.
+
+6. OUTPUT FORMAT (STRICT JSON ONLY):
 {
-  "prices": [
+  "shelves": [
     {
-      "price": "4.99",
-      "shelf_level": "2nd",
-      "position": "center",
-      "product_hint": "sourdough bread",
-      "confidence": 85
+      "shelf_number": 1,
+      "products": ["Product 1", "Product 2", ...]
+    },
+    {
+      "shelf_number": 2,
+      "products": [...]
     }
   ]
 }
+
+7. DO NOT:
+- Do not explain anything
+- Do not add comments
+- Do not return anything except JSON
 """
+
 
     response = client.responses.create(
         model=os.environ["AZURE_OPENAI_MODEL"],
         input=[
             {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
             {"role": "user", "content": [
-                {"type": "input_text", "text": "Extract all visible products from this ACTUAL shelf photo. Return ONLY JSON."},
+                {"type": "input_text", "text": "Extract products shelf by shelf from this actual image. Return ONLY JSON."},
                 {"type": "input_image", "image_url": encode_image(actual_path)}
             ]}
         ]
@@ -203,6 +252,82 @@ Return strictly valid JSON:
     for shelf in data.get("shelves", []):
         shelf["products"] = [clean_product_name(p) for p in shelf.get("products", [])]
     return data
+
+# def extract_actual(actual_path):
+#     # st.info("📷 Step 2: Extracting from Actual Shelf...")
+
+#     system_prompt = """
+# You are an AI system specialized in retail shelf analysis from images.
+
+# The image may contain blurry or small text. You must carefully extract information without guessing incorrectly.
+
+# Tasks:
+# 1. Detect all visible price tags and item name on the shelf.
+# 2. Extract the price value (e.g., 4.99, 6.99).
+# 3. Handle blurry text:
+#    - If the price is slightly blurry but readable, extract it.
+#    - If the price is NOT clearly readable, ignore it (do NOT guess).
+# 4. Identify the associated product:
+#    - Look directly ABOVE the price tag for the product.
+#    - Extract product name from visible packaging text.
+# 5. Determine:
+#    - Shelf level (top = 1st, then 2nd, 3rd, etc.)
+#    - Horizontal position (left, center, right)
+# 6. Assign a confidence score (0–100) based on:
+#    - Text clarity (sharp vs blurry)
+#    - Visibility of the price tag
+#    - Certainty of product association
+
+# Confidence Guidelines:
+# - 90–100: very clear price and product
+# - 70–89: readable but slightly blurry
+# - 30–69: partially unclear but likely correct
+# - Below 30: DO NOT include the item
+
+# Rules:s
+# - Only return valid prices (must contain decimals like 4.99)
+# - Do NOT hallucinate missing prices or product names
+# - If unsure, skip the item entirely
+# - Keep product_hint short (2–4 words max)
+# - Confidence must be an integer (no % sign)
+
+# Return strictly valid JSON:
+
+# {
+#   "prices": [
+#     {
+#       "price": "4.99",
+#       "shelf_level": "2nd",
+#       "position": "center",
+#       "product_hint": "sourdough bread",
+#       "confidence": 85
+#     }
+#   ]
+# }
+# """
+
+#     response = client.responses.create(
+#         model=os.environ["AZURE_OPENAI_MODEL"],
+#         input=[
+#             {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+#             {"role": "user", "content": [
+#                 {"type": "input_text", "text": "Extract all visible products from this ACTUAL shelf photo. Return ONLY JSON."},
+#                 {"type": "input_image", "image_url": encode_image(actual_path)}
+#             ]}
+#         ]
+#     )
+
+#     result = response.output_text.strip()
+#     if result.startswith("```"):
+#         result = result.split("```")[1].replace("json", "").strip()
+
+#     json_path = save_json(result, "actual_extracted")
+#     # st.write(f"📄 JSON saved at: {json_path}")
+
+#     data = json.loads(result)
+#     for shelf in data.get("shelves", []):
+#         shelf["products"] = [clean_product_name(p) for p in shelf.get("products", [])]
+#     return data
 
 
 def compare_planogram_vs_actual(planogram_data, actual_data):
@@ -610,8 +735,15 @@ else:
             if planogram_file:
                 st.image(planogram_file, caption="Planogram", width=300)
         with prev2:
+            # if actual_file:
+            #     st.image(actual_file, caption="Actual Shelf" , width=300)
+
+            from PIL import Image, ImageOps
+
             if actual_file:
-                st.image(actual_file, caption="Actual Shelf" , width=300)
+                img = Image.open(actual_file)
+                img = ImageOps.exif_transpose(img)  # auto-correct orientation
+                st.image(img, caption="Actual Shelf", width=300)    
 
     run_clicked = st.button("🚀 Run 3-Step Compliance Check", disabled=not (planogram_file and actual_file), type="primary")
 
@@ -632,6 +764,9 @@ else:
             log("Saving uploaded images...")
             plan_path = save_uploaded_file(planogram_file, "planogram.jpg")
             actual_path = save_uploaded_file(actual_file, "actual.jpg")
+
+          
+
             progress.progress(20)
 
             log("Step 1/3: Extracting Planogram...")
@@ -639,7 +774,7 @@ else:
             progress.progress(45)
 
             log("Step 2/3: Extracting Actual Shelf...")
-            actual_data = extract_actual(actual_path)
+            actual_data = extract_actual(actual_path) #same
             progress.progress(70)
 
             log("Step 3/3: Comparing Planogram vs Actual...")
